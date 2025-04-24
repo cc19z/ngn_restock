@@ -1,0 +1,1 @@
+TOKEN = os.getenv("TOKEN")  # <-- token 這行示意，完整內容略
