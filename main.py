@@ -1,8 +1,8 @@
+import os
 import discord
 import asyncio
 import requests
 import json
-import os
 from bs4 import BeautifulSoup
 from flask import Flask
 from threading import Thread
@@ -18,14 +18,12 @@ SAVE_FILE = 'products.json'
 THRESHOLD = 1600
 CHECK_INTERVAL = 1200  # 每 20 分鐘
 
-# Discord 基本設定
 intents = discord.Intents.default()
 intents.guilds = True
 intents.messages = True
 intents.members = True
 client = discord.Client(intents=intents)
 
-# keep-alive 用 flask
 app = Flask('')
 
 @app.route('/')
@@ -39,12 +37,10 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 爬取商品
 async def fetch_product_info():
     headers = {"User-Agent": "Mozilla/5.0"}
     products = {}
     max_pages = 250
-
     for page_num in range(1, max_pages + 1):
         try:
             page_url = f"{URL}?page={page_num}"
@@ -86,11 +82,9 @@ async def fetch_product_info():
                 }
 
         print(f"✅ 第 {page_num} 頁抓到 {len(items)} 件")
-
     print(f"🎯 共抓到 {len(products)} 件商品")
     return products
 
-# 儲存與載入
 def load_saved_products():
     if os.path.exists(SAVE_FILE):
         with open(SAVE_FILE, 'r', encoding='utf-8') as f:
@@ -101,7 +95,6 @@ def save_products(products):
     with open(SAVE_FILE, 'w', encoding='utf-8') as f:
         json.dump(products, f, ensure_ascii=False, indent=2)
 
-# 單次檢查
 async def run_once(channel, saved_products):
     try:
         new_products = await fetch_product_info()
@@ -118,29 +111,29 @@ async def run_once(channel, saved_products):
         removed = set(saved_products.keys()) - set(new_products.keys())
         added = set(new_products.keys()) - set(saved_products.keys())
 
-        for link in removed:
-            p = saved_products[link]
+        if removed:
+            description = ""
+            for link in removed:
+                p = saved_products[link]
+                description += f"❌ **{p['name']}**\n價格：{p['price']}\n[查看商品]({BASE_URL}{link})\n\n"
             embed = discord.Embed(
-                title="❌ 商品下架了（可能補貨中）",
-                description=f"**{p['name']}**\n價格：{p['price']}\n[查看商品]({BASE_URL}{link})",
+                title="❌ 商品下架列表（可能補貨中）",
+                description=description,
                 color=0xff6961
             )
-            if p['image']:
-                embed.set_thumbnail(url=p['image'])
             await channel.send(embed=embed)
-            await asyncio.sleep(1.2)
 
-        for link in added:
-            p = new_products[link]
+        if added:
+            description = ""
+            for link in added:
+                p = new_products[link]
+                description += f"🆕 **{p['name']}**\n價格：{p['price']}\n[查看商品]({BASE_URL}{link})\n\n"
             embed = discord.Embed(
-                title="🆕 新上架商品",
-                description=f"**{p['name']}**\n價格：{p['price']}\n[查看商品]({BASE_URL}{link})",
+                title="🆕 新上架商品列表",
+                description=description,
                 color=0x66ccff
             )
-            if p['image']:
-                embed.set_thumbnail(url=p['image'])
             await channel.send(embed=embed)
-            await asyncio.sleep(1.2)
 
         await channel.send(
             f"📦 **Nagano 官網檢查完成**\n"
@@ -155,7 +148,6 @@ async def run_once(channel, saved_products):
         print(f"⚠️ 執行時錯誤：{e}")
         return saved_products
 
-# 主監控迴圈
 async def monitor_products():
     await client.wait_until_ready()
     guild = client.get_guild(GUILD_ID)
